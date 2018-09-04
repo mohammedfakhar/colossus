@@ -1,0 +1,106 @@
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: prometheus
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: colossus
+        component: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.2.1
+        args:
+        - "--config.file=/etc/prometheus/prometheus.yml"
+        ports:
+        - containerPort: 9090
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/prometheus
+        - name: data-volume
+          mountPath: /prometheus
+      volumes:
+      - name: config-volume
+        configMap:
+          defaultMode: 420
+          name: prometheus-conf
+      - name: data-volume
+        emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-conf
+  labels:
+    name: prometheus-conf
+data:
+  prometheus.yml: |-
+    global:
+      scrape_interval:     5s
+      evaluation_interval: 5s
+    scrape_configs:
+      - job_name: 'web'
+        static_configs:
+          - targets: ['colossus-web-svc:3000']
+      - job_name: 'auth'
+        static_configs:
+          - targets: ['colossus-auth-svc:9092']
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  labels:
+    app: colossus
+    component: prometheus
+spec:
+  ports:
+  - port: 9090
+    protocol: TCP
+    name: server
+  clusterIP: None
+  selector:
+    app: colossus
+    component: prometheus
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: colossus
+        component: prometheus
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:5.1.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PROMETHEUS_URL
+          value: https://prometheus:9090/
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  labels:
+    app: colossus
+    component: grafana
+spec:
+  ports:
+  - port: 3000
+    protocol: TCP
+    name: server
+  clusterIP: None
+  selector:
+    app: colossus
+    component: grafana
